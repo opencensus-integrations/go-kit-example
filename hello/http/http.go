@@ -8,9 +8,10 @@ import "net/http"
 import httptransport "github.com/go-kit/kit/transport/http"
 import "github.com/opencensus-integrations/go-kit-example/hello/endpoints"
 
-func NewHTTPHandler(endpoints endpoints.Endpoints) http.Handler {
+func NewHTTPHandler(endpoints endpoints.Endpoints, options ...httptransport.ServerOption) http.Handler {
 	m := http.NewServeMux()
-	m.Handle("/hello", httptransport.NewServer(endpoints.Hello, DecodeHelloRequest, EncodeHelloResponse))
+	m.Handle("/hello", httptransport.NewServer(
+		endpoints.Hello, DecodeHelloRequest, EncodeHelloResponse, options...))
 	return m
 }
 func DecodeHelloRequest(_ context.Context, r *http.Request) (interface{}, error) {
