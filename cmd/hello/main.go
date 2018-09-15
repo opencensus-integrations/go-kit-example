@@ -9,8 +9,13 @@ import (
 	"syscall"
 
 	"github.com/go-kit/kit/log"
+	kitoc "github.com/go-kit/kit/tracing/opencensus"
 	httptransport "github.com/go-kit/kit/transport/http"
 	"github.com/oklog/run"
+	zipkin "github.com/openzipkin/zipkin-go"
+	httpreporter "github.com/openzipkin/zipkin-go/reporter/http"
+	oczipkin "go.opencensus.io/exporter/zipkin"
+	"go.opencensus.io/trace"
 
 	"github.com/opencensus-integrations/go-kit-example/hello/endpoints"
 	svchttp "github.com/opencensus-integrations/go-kit-example/hello/http"
@@ -19,6 +24,7 @@ import (
 
 const (
 	serviceName = "oc-gokit-example"
+	zipkinURL   = "http://localhost:9411/api/v2/spans"
 )
 
 func main() {
@@ -28,6 +34,22 @@ func main() {
 		logger = log.NewLogfmtLogger(os.Stdout)
 		logger = log.NewSyncLogger(logger)
 		logger = log.With(logger, "svc", serviceName)
+	}
+
+	// Set-up our OpenCensus instrumentation with Zipkin backend
+	{
+		var (
+			reporter         = httpreporter.NewReporter(zipkinURL)
+			localEndpoint, _ = zipkin.NewEndpoint(serviceName, ":0")
+			exporter         = oczipkin.NewExporter(reporter, localEndpoint)
+		)
+		defer reporter.Close()
+
+		// Always sample our traces for this demo.
+		trace.ApplyConfig(trace.Config{DefaultSampler: trace.AlwaysSample()})
+
+		// Register our trace exporter.
+		trace.RegisterExporter(exporter)
 	}
 
 	// Set-up our service.
@@ -41,9 +63,13 @@ func main() {
 			Hello: endpoints.MakeHelloEndpoint(svc),
 		}
 
+		// Wrap our service endpoints with OpenCensus tracing middleware.
+		endpoints.Hello = kitoc.TraceEndpoint("gokit:endpoint hello")(endpoints.Hello)
+
 		// Set-up our Go kit HTTP transport options.
 		var serverOptions []httptransport.ServerOption
 		serverOptions = append(serverOptions, httptransport.ServerErrorLogger(logger))
+		serverOptions = append(serverOptions, kitoc.HTTPServerTrace())
 
 		// Create our HTTP transport handler.
 		handler = svchttp.NewHTTPHandler(endpoints, serverOptions...)
