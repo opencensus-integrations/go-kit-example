@@ -15,6 +15,8 @@ type HelloResponse struct {
 	Err      error
 }
 
+func (r HelloResponse) Failed() error { return r.Err }
+
 func MakeHelloEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (interface{}, error) {
 		req := request.(HelloRequest)
